@@ -1,0 +1,75 @@
+#
+# Copyright 2012-2016 Chef Software, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name "nginx"
+default_version "1.8.1"
+
+dependency "curl"
+dependency "pcre"
+dependency "openssl"
+
+license "BSD-2-Clause"
+license_file "LICENSE"
+
+source url: "http://nginx.org/download/nginx-#{version}.tar.gz"
+
+version("1.9.1") { source md5: "fc054d51effa7c80a2e143bc4e2ae6a7" }
+version("1.8.1") { source md5: "2e91695074dbdfbf1bcec0ada9fda462" }
+version("1.8.0") { source md5: "3ca4a37931e9fa301964b8ce889da8cb" }
+version("1.6.3") { source md5: "ea813aee2c344c2f5b66cdb24a472738" }
+version("1.4.7") { source md5: "aee151d298dcbfeb88b3f7dd3e7a4d17" }
+version("1.4.4") { source md5: "5dfaba1cbeae9087f3949860a02caa9f" }
+
+relative_path "nginx-#{version}"
+
+# Grab the ruby and passenger components as we will be using them in the configure
+ruby_cmpt = project.library.components.find { |c| c.name == 'ruby' }
+pgem_cmpt = project.library.components.find { |c| c.name == 'passenger' }
+
+build do
+  env = with_standard_compiler_flags(with_embedded_path({
+      "EXTRA_CFLAGS"    => "-I#{install_dir}/embedded/include",
+      "EXTRA_CXXFLAGS"  => "-I#{install_dir}/embedded/include",
+      "EXTRA_LDFLAGS"   => "-L#{install_dir}/embedded/lib",
+      "BUNDLE_BIN_PATH" => "#{install_dir}/embedded/bin/bundle",
+      "RUBYOPT" 		    => nil,
+      "BUNDLE_BEMFILE"  => nil,
+      "GEM_PATH"		    => nil,
+      "GEM_HOME"        => nil}))
+
+  configure_command = [
+    "./configure",
+    "--prefix=#{install_dir}/embedded",
+    "--with-http_ssl_module",
+    "--with-http_stub_status_module",
+    "--with-ipv6",
+    "--with-debug",
+    "--with-cc-opt=\"-L#{install_dir}/embedded/lib -I#{install_dir}/embedded/include\"",
+    "--with-ld-opt=-L#{install_dir}/embedded/lib"
+  ]
+
+  unless ruby_cmpt.nil? || pgem_cmpt.nil?
+    configure_command << "--add-module=#{install_dir}/embedded/lib/ruby/gems/#{ruby_cmpt.version.match(/^(\d+\.\d+)/)[0]}.0/gems/passenger-#{pgem_cmpt.version}/ext/nginx"
+  end
+
+  command configure_command.join(" "), env: env
+
+  make "-j #{workers}", env: env
+  make "install", env: env
+
+  # Ensure the logs directory is available on rebuild from git cache
+  touch "#{install_dir}/embedded/logs/.gitkeep"
+end

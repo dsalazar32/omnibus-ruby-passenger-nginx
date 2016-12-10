@@ -1,0 +1,9 @@
+#!/bin/sh
+#
+# Perform necessary ruby-passenger-nginx removal steps
+# after package is uninstalled.
+#
+
+echo "ruby-passenger-nginx has been uninstalled!"
+
+exit 0
